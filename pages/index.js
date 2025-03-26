@@ -3,7 +3,7 @@ import Modal from "react-modal";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCamera, faVideo, faArrowUp } from "@fortawesome/free-solid-svg-icons";
 import UploadModal from "@/components/UploadModal";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 Modal.setAppElement("body");
 
 export default function Home({ uploadOpen, setUploadOpen }) {
