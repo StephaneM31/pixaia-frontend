@@ -84,21 +84,20 @@ export default function UploadModal({ isOpen, onClose, onSuccess }) {
       <button className="close-button" onClick={onClose}>✖</button>
       <h2 style={{ color: "#00eaff", marginBottom: "15px" }}>Uploader un fichier</h2>
 
-      <input
-        type="text"
-        placeholder="Titre, description"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        className="upload-input"
-      />
+      <textarea
+  placeholder="Titre ou description"
+  value={title}
+  onChange={(e) => setTitle(e.target.value)}
+  className="upload-textarea"
+/>
 
-      <input
-        type="text"
-        placeholder="Tags (ex: art, IA)"
-        value={tags}
-        onChange={(e) => setTags(e.target.value)}
-        className="upload-input"
-      />
+
+<textarea
+  placeholder="Tags (ex: art, IA)"
+  value={tags}
+  onChange={(e) => setTags(e.target.value)}
+  className="upload-textarea"
+/>
 
       <input type="file" onChange={handleFileChange} className="upload-input" />
 

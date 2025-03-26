@@ -3,7 +3,7 @@ import Modal from "react-modal";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCamera, faVideo, faArrowUp } from "@fortawesome/free-solid-svg-icons";
 import UploadModal from "@/components/UploadModal";
-
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 Modal.setAppElement("body");
 
 export default function Home({ uploadOpen, setUploadOpen }) {
@@ -31,15 +31,16 @@ export default function Home({ uploadOpen, setUploadOpen }) {
   };
 
   useEffect(() => {
-    fetch("http://localhost:5000/files")
+    fetch(`${API_URL}/files`)
       .then((res) => res.json())
       .then(async (data) => {
         const filesWithDimensions = await Promise.all(
           data.files.map(async (file) => {
+            if (!file || !file.path) return file;
             if (file.filename.endsWith(".mp4") || file.filename.endsWith(".webm")) return file;
             return new Promise((resolve) => {
               const img = new Image();
-              img.src = `http://localhost:5000${file.path}`;
+              img.src = `${API_URL}${file.path}`;
               img.onload = () => resolve({ ...file, width: img.naturalWidth, height: img.naturalHeight });
               img.onerror = () => resolve({ ...file });
             });
@@ -51,13 +52,27 @@ export default function Home({ uploadOpen, setUploadOpen }) {
       })
       .catch((err) => console.error("Erreur :", err));
   }, []);
-
+  useEffect(() => {
+    if (modalIsOpen) {
+      const scrollY = window.scrollY;
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = "100%";
+      document.body.dataset.scrollY = scrollY;
+    } else {
+      const scrollY = document.body.dataset.scrollY;
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.width = "";
+      window.scrollTo(0, parseInt(scrollY || "0"));
+      delete document.body.dataset.scrollY;
+    }
+  }, [modalIsOpen]);
+  
   useEffect(() => {
     if (!galleryRef.current) return;
-
     import("masonry-layout").then(({ default: Masonry }) => {
       if (masonryInstance.current) masonryInstance.current.destroy();
-
       masonryInstance.current = new Masonry(galleryRef.current, {
         itemSelector: ".file-card",
         columnWidth: 220,
@@ -66,16 +81,13 @@ export default function Home({ uploadOpen, setUploadOpen }) {
         horizontalOrder: true,
         percentPosition: false,
       });
-
       masonryInstance.current.layout();
     });
-
     return () => {
       if (masonryInstance.current) masonryInstance.current.destroy();
     };
   }, [filteredFiles, columnWidth]);
 
-  // ✅ Correction : force layout après mise à jour des fichiers filtrés
   useEffect(() => {
     const timer = setTimeout(() => {
       masonryInstance.current?.layout();
@@ -89,7 +101,6 @@ export default function Home({ uploadOpen, setUploadOpen }) {
       masonryInstance.current?.layout();
       setTimeout(() => masonryInstance.current?.layout(), 300);
     };
-
     window.addEventListener("resize", handleResize);
     updateColumnWidth();
     return () => window.removeEventListener("resize", handleResize);
@@ -110,7 +121,10 @@ export default function Home({ uploadOpen, setUploadOpen }) {
 
   const handleFilter = (type) => {
     setFilterType(type);
-    applyFilters(type, searchQuery, randomMode);
+    setFilteredFiles([]);
+    setTimeout(() => {
+      applyFilters(type, searchQuery, randomMode);
+    }, 0);
   };
 
   const resetFilter = () => {
@@ -136,34 +150,27 @@ export default function Home({ uploadOpen, setUploadOpen }) {
   };
 
   const applyFilters = (type, query, isRandom) => {
-    let url = "http://localhost:5000/files";
-
-    if (query) {
-      url = `http://localhost:5000/search?query=${query}`;
-    } else if (type) {
-      url = `http://localhost:5000/filter?type=${type}`;
-    }
+    let url = `${API_URL}/files`;
+    if (query) url = `${API_URL}/search?query=${query}`;
+    else if (type) url = `${API_URL}/filter?type=${type}`;
 
     fetch(url)
       .then((res) => res.json())
       .then(async (data) => {
         const filesWithDimensions = await Promise.all(
           data.files.map(async (file) => {
+            if (!file || !file.path) return file;
             if (file.filename.endsWith(".mp4") || file.filename.endsWith(".webm")) return file;
             return new Promise((resolve) => {
               const img = new Image();
-              img.src = `http://localhost:5000${file.path}`;
+              img.src = `${API_URL}${file.path}`;
               img.onload = () => resolve({ ...file, width: img.naturalWidth, height: img.naturalHeight });
               img.onerror = () => resolve({ ...file });
             });
           })
         );
-
         let finalList = filesWithDimensions.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
-        if (isRandom) {
-          finalList = [...finalList].sort(() => Math.random() - 0.5);
-        }
-
+        if (isRandom) finalList = [...finalList].sort(() => Math.random() - 0.5);
         setFilteredFiles(finalList);
       })
       .catch((err) => console.error("Erreur filtrage combiné :", err));
@@ -174,16 +181,18 @@ export default function Home({ uploadOpen, setUploadOpen }) {
       <h1>Développement en cours... 🚀</h1>
       <p>Prochaines étapes, création BDD, gestion users, commentaires, likes</p>
 
-      <input
-        type="text"
-        placeholder="Rechercher un fichier"
-        value={searchQuery}
-        onChange={(e) => handleSearch(e.target.value)}
-        className="search-bar"
-      />
+      <div className="search-bar-container">
+        <input
+          type="text"
+          placeholder="🔍 Rechercher un fichier..."
+          value={searchQuery}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="search-bar"
+        />
+      </div>
 
       <div className="filter-buttons">
-        <button onClick={resetFilter} className={!filterType ? "active" : ""}>🔄 Tout</button>
+        <button onClick={() => handleFilter("")} className={!filterType ? "active" : ""}>🔄 Tout</button>
         <button onClick={() => handleFilter("image")} className={filterType === "image" ? "active" : ""}>📷 Images</button>
         <button onClick={() => handleFilter("video")} className={filterType === "video" ? "active" : ""}>🎥 Vidéos</button>
         <button onClick={handleRandom} className={randomMode ? "active" : ""}>🎲 Aléatoire</button>
@@ -199,7 +208,7 @@ export default function Home({ uploadOpen, setUploadOpen }) {
             {file.filename.endsWith(".mp4") || file.filename.endsWith(".webm") ? (
               <div className="thumbnail video">
                 <video
-                  src={`http://localhost:5000${file.path}`}
+                  src={`${API_URL}${file.path}`}
                   width="100%"
                   onMouseEnter={(e) => e.target.play()}
                   onMouseLeave={(e) => e.target.pause()}
@@ -213,7 +222,7 @@ export default function Home({ uploadOpen, setUploadOpen }) {
               </div>
             ) : (
               <div className="thumbnail image">
-                <img src={`http://localhost:5000${file.path}`} alt="Image" width="100%" />
+                <img src={`${API_URL}${file.path}`} alt="Image" width="100%" />
                 <span className="icon image">
                   <FontAwesomeIcon icon={faCamera} />
                 </span>
@@ -238,111 +247,87 @@ export default function Home({ uploadOpen, setUploadOpen }) {
         }}
       />
 
-<Modal
+      {/* ✅ Nouvelle modale refondue : texte à gauche, media à droite */}
+      <Modal
   isOpen={modalIsOpen}
   onRequestClose={closeModal}
-  className="modal-content"
+  className="modal-content full"
   overlayClassName="overlay"
 >
-  {selectedFile && (
-    <>
-      {/* ✅ Ligne indépendante pour le bouton */}
-      <div className="modal-top">
-        <button className="close-button" onClick={closeModal}>✖</button>
-      </div>
+  <button className="close-button" onClick={closeModal}>✖</button>
 
-      {/* ✅ Tout le reste dans modal-body */}
-      <div className="modal-body">
-        <div className={`modal-description-box ${isDescriptionExpanded ? "expanded" : ""}`}>
+  {selectedFile && (
+    <div className="modal-grid">
+      {/* Partie gauche : texte */}
+      <div className="modal-left">
+        <div className="modal-description-box expanded">
           <p className="modal-description-text">
             {selectedFile.title || "Pas de description"}
           </p>
-          {selectedFile.title?.length > 150 && (
-            <button
-              className="expand-description-btn"
-              onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-            >
-              {isDescriptionExpanded ? "➖" : "➕"}
-            </button>
-  )}
-</div>
+        </div>
 
+        <div className="modal-tags">
+          {selectedFile.tags?.map(tag => `#${tag}`).join(" ")}
+        </div>
 
+        <div className="modal-comments">
+          <h3>Commentaires</h3>
+          <p style={{ color: "#aaa" }}>💬 Cette section est en cours de développement...</p>
+        </div>
+      </div>
 
-              <div className="modal-tags">
-                {selectedFile.tags?.map(tag => `#${tag}`).join(" ")}
-              </div>
-
-              <div className="modal-media">
-                {selectedFile.filename.endsWith(".mp4") || selectedFile.filename.endsWith(".webm") ? (
-                  <video
-                    src={`http://localhost:5000${selectedFile.path}`}
-                    controls
-                    autoPlay
-                    loop
-                    className="media-content"
-                  />
-                ) : (
-                  <img
-                    src={`http://localhost:5000${selectedFile.path}`}
-                    alt="Image"
-                    className="media-content"
-                  />
-                )}
-              </div>
-
-              <div className="modal-comments">
-                <h3>Commentaires</h3>
-                <p style={{ color: "#aaa" }}>💬 Cette section est en cours de développement...</p>
-              </div>
-
-              {showConfirm ? (
-                <div className="confirm-box">
-                  <p>Êtes-vous sûr de vouloir supprimer ce fichier ?</p>
-                  <button className="confirm-btn" onClick={async () => {
-                    try {
-                      const response = await fetch(`http://localhost:5000/delete/${selectedFile.filename}`, {
-                        method: "DELETE",
-                      });
-                      if (response.ok) {
-                        setFiles(prev => prev.filter(file => file.filename !== selectedFile.filename));
-                        setFilteredFiles(prev => prev.filter(file => file.filename !== selectedFile.filename));
-                        closeModal();
-                      } else {
-                        console.error("Erreur lors de la suppression !");
-                      }
-                    } catch (error) {
-                      console.error("Erreur lors de la requête :", error);
-                    } finally {
-                      setShowConfirm(false);
-                    }
-                  }}>
-                    Oui
-                  </button>
-                  <button className="cancel-btn" onClick={() => setShowConfirm(false)}>Non</button>
-                </div>
-              ) : (
-                <button className="delete-btn" onClick={() => setShowConfirm(true)}>🗑 Supprimer</button>
-              )}
-            </div>
-          </>
+      {/* Partie droite : media */}
+      <div className="modal-right">
+        {selectedFile.filename.endsWith(".mp4") || selectedFile.filename.endsWith(".webm") ? (
+          <video
+            src={`${API_URL}${selectedFile.path}`}
+            controls
+            autoPlay
+            loop
+            className="media-full"
+          />
+        ) : (
+          <img
+            src={`${API_URL}${selectedFile.path}`}
+            alt="Image"
+            className="media-full"
+          />
         )}
-      </Modal>
-
-      {showFullText && selectedFile && (
-  <Modal
-    isOpen={showFullText}
-    onRequestClose={() => setShowFullText(false)}
-    className="modal-content"
-    overlayClassName="overlay"
-  >
-    <button className="close-button" onClick={() => setShowFullText(false)}>✖</button>
-    <div className="modal-full-text">
-      <h2>Description complète</h2>
-      <p>{selectedFile.title}</p>
+      </div>
     </div>
-  </Modal>
-)}
+  )}
+
+  <div className="modal-footer">
+    {showConfirm ? (
+      <div className="confirm-box">
+        <p>Êtes-vous sûr de vouloir supprimer ce fichier ?</p>
+        <button className="confirm-btn" onClick={async () => {
+          try {
+            const response = await fetch(`${API_URL}/delete/${selectedFile.filename}`, {
+              method: "DELETE",
+            });
+            if (response.ok) {
+              setFiles(prev => prev.filter(file => file.filename !== selectedFile.filename));
+              setFilteredFiles(prev => prev.filter(file => file.filename !== selectedFile.filename));
+              closeModal();
+            } else {
+              console.error("Erreur lors de la suppression !");
+            }
+          } catch (error) {
+            console.error("Erreur lors de la requête :", error);
+          } finally {
+            setShowConfirm(false);
+          }
+        }}>
+          Oui
+        </button>
+        <button className="cancel-btn" onClick={() => setShowConfirm(false)}>Non</button>
+      </div>
+    ) : (
+      <button className="delete-btn" onClick={() => setShowConfirm(true)}>🗑 Supprimer</button>
+    )}
+  </div>
+</Modal>
     </div>
   );
 }
